@@ -9,6 +9,7 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { checkTransfer } from "./transfer-check.mjs";
+import { checkSwStall } from "./sw-check.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
@@ -55,6 +56,8 @@ const typeOf = (t) => (K1.some((w) => t.startsWith(w)) ? "k1" : K2.some((w) => t
     for (const c of P.choices) if (!c.ok) { const t = typeOf(c.t); if (t === P.type && !/^(gos|dek|osu|kur|sag|gor)$/.test(c.w) && same.length < 6) same.push(`${id}:${c.t}`); }
   }
   check("まちがいの言い方に、正しい言い方と同じ種類の敬語を入れない（まちがいの形として指針が示すものだけは別）", same.length === 0, same.join(","));
+  const k2pl = G.KIND_IDS.filter((id) => G.K[id].type === "k2" && Array.from({ length: 200 }, (_, s) => G.make(`${G.K[id].lv}:${id}|p${s}`)).some((P) => P.choices.some((c) => !c.ok && c.w === "pl")));
+  check("謙譲語Ⅱの問題に、丁寧語だけの言い方（これも正しい）をまちがいとして並べない", k2pl.length === 0, k2pl.join(","));
   const famBad = [];
   for (const id of ["famgo", "famto", "famson"]) for (let s = 0; s < 200; s++) { const P = G.make(`${G.K[id].lv}:${id}|f${s}`); if (P.choices.some((c) => !c.ok && typeOf(c.t) === "k2")) famBad.push(id); }
   check("身内の問題は、謙譲語Ⅱ（参る・申す）だけが正しい（指針 p.23）", famBad.length === 0, famBad.slice(0, 3).join(","));
@@ -103,6 +106,7 @@ check("README の URL のすぐ後ろに全角の字を続けない（Link check
 { const sw = readFileSync(path.join(root, "sw.js"), "utf8"), mf = JSON.parse(readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
   const shell = JSON.parse(sw.match(/SHELL = (\[[^\]]+\])/)[1]);
   check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js も）、取り直しで古い画面を入れず、外へ何も送らない", ["./index.html", "./gen.js", "./transfer.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].every((f) => shell.includes(f)) && /cache: "reload"/.test(sw) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
+  { const st = await checkSwStall(sw); check("PWA：sw.js は本文の途中で通信が止まっても4秒で保存した画面を返す（shared-workflows template/qa/sw-check.mjs）", st.ok, JSON.stringify(st)); }
   check("PWA：manifest にアイコン2つと名前がある", mf.name === "敬語なおし" && mf.icons.length >= 2 && mf.start_url === "./"); }
 
 // ---- 3. ブラウザで遊ぶ ----
